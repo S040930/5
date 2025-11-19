@@ -1,6 +1,6 @@
 (function () {
     if (!window.__AMAP_KEY__) {
-        window.__AMAP_KEY__ = 'ca544fecfb222fa00fb4219fbbebae1f';
+        window.__AMAP_KEY__ = '08fdc5ee94bf41d5987973b88a444293';
     }
     const resolveApiBase = () => {
         if (typeof window === 'undefined') return '';
