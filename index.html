@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BikeMate - Smart Cycling Assistant</title>
+    
+    <!-- Preconnect to map domains for faster loading -->
+    <link rel="preconnect" href="https://webapi.amap.com">
+    <link rel="preconnect" href="https://vdata.amap.com">
+    <link rel="dns-prefetch" href="https://webapi.amap.com">
+    <link rel="dns-prefetch" href="https://vdata.amap.com">
+
+    <!-- Use a more compatible API loader -->
+    <script src="assets/js/init-amap.js" defer></script>
+    <!-- AMap UI will be loaded after core API is ready -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="assets/css/bike.css">
+</head>
+<body>
+    <!-- Performance debug and low-motion controls (developers/advanced users only) -->
+    <div id="perf-panel" class="perf-panel hidden" aria-hidden="true">
+        <div class="perf-header">
+            <span>Performance</span>
+            <button type="button" class="perf-close" onclick="togglePerfPanel(false)">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <div class="perf-body">
+            <div class="perf-row">
+                <span>FPS</span>
+                <span id="perf-fps">--</span>
+            </div>
+            <div class="perf-row">
+                <span>Frame Time</span>
+                <span id="perf-frame">-- ms</span>
+            </div>
+            <div class="perf-row">
+                <span>Low Motion</span>
+                <label class="switch small">
+                    <input type="checkbox" id="low-motion-toggle" onchange="toggleLowMotion(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <button id="perf-toggle-btn" class="perf-toggle-btn" type="button" onclick="togglePerfPanel()" aria-label="Toggle performance panel">
+        <i class="fas fa-gauge-high"></i>
+    </button>
+
+    <div class="nav top">
+        <h1>BikeMate</h1>
+        <div class="nav-icons">
+            <i class="fas fa-bell" onclick="showDevNotice('Notification feature')"></i>
+            <i class="fas fa-user" onclick="navigateTo('user-page')"></i>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- API status -->
+        <div class="api-status" id="api-status">
+            <i class="fas fa-spinner fa-spin"></i> Loading AMap API...
+        </div>
+
+        <!-- Login page -->
+        <div id="login-page" class="page active">
+            <div class="login-container">
+                <div class="login-header">
+                    <div class="login-logo">
+                        <i class="fas fa-bicycle"></i>
+                    </div>
+                    <h1 class="login-title">BikeMate</h1>
+                    <p class="login-subtitle">Smart Cycling Assistant</p>
+                </div>
+                
+                <div class="login-card">
+                    <h2 class="login-card-title">Welcome back</h2>
+                    <p class="login-card-subtitle">Log into your account</p>
+                    
+                    <form id="login-form" onsubmit="handleLogin(event)">
+                        <div class="form-group">
+                            <label for="account">
+                                <i class="fas fa-user"></i>
+                                <span>Email or Phone Number</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                id="account" 
+                                class="form-control" 
+                                placeholder="Enter your email or phone number"
+                                value="user@example.com"
+                                required
+                                autocomplete="username"
+                            >
+                            <div class="error-message" id="account-error">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>Please enter a valid email or phone number</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="password">
+                                <i class="fas fa-lock"></i>
+                                <span>Password</span>
+                            </label>
+                            <input 
+                                type="password" 
+                                id="password" 
+                                class="form-control" 
+                                placeholder="Enter your password"
+                                value="ChangeMe123!"
+                                required
+                                minlength="6"
+                            >
+                            <div class="error-message" id="password-error">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>Password must be at least 6 characters</span>
+                            </div>
+                        </div>
+                        
+                        <div class="login-demo-notice">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Demo account credentials are pre-filled for quick testing</span>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-login" id="login-btn">
+                            <span class="btn-text">Log In</span>
+                            <span class="btn-loader">
+                                <span class="loader-dot"></span>
+                                <span class="loader-dot"></span>
+                                <span class="loader-dot"></span>
+                            </span>
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="login-footer">
+                    <p>Don't have an account? <a href="#" onclick="showDevNotice('Registration'); return false;">Sign up</a></p>
+                </div>
+            </div>
+            
+            <!-- Immersive loading overlay -->
+            <div id="login-loading-overlay" class="login-loading-overlay">
+                <div class="loading-content">
+                    <!-- Bicycle rolling animation track -->
+                    <div class="bike-animation-container">
+                        <div class="bike-track">
+                            <!-- Road line markers -->
+                            <div class="road-lines"></div>
+                            <!-- Bicycle with rolling animation -->
+                            <div class="bike-rolling" id="bike-rolling">
+                                <i class="fas fa-bicycle"></i>
+                            </div>
+                            <!-- Starting and ending points -->
+                            <div class="track-start">
+                                <i class="fas fa-flag-checkered"></i>
+                            </div>
+                            <div class="track-end">
+                                <i class="fas fa-trophy"></i>
+                            </div>
+                        </div>
+                        <!-- Loading stage indicators -->
+                        <div class="loading-stages" id="loading-stages">
+                            <div class="stage-item" id="stage-program">
+                                <div class="stage-icon">
+                                    <i class="fas fa-server"></i>
+                                </div>
+                                <div class="stage-text">Program Init</div>
+                                <div class="stage-status">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                </div>
+                            </div>
+                            <div class="stage-item" id="stage-map">
+                                <div class="stage-icon">
+                                    <i class="fas fa-map"></i>
+                                </div>
+                                <div class="stage-text">Map API</div>
+                                <div class="stage-status">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="bike-loading-text" id="bike-loading-text">Initializing program...</p>
+                    </div>
+                    
+                    <!-- Fallback spinner (shown after timeout) -->
+                    <div class="loading-spinner fallback-spinner" id="fallback-spinner" style="display: none;">
+                        <div class="spinner-ring"></div>
+                        <div class="spinner-ring"></div>
+                        <div class="spinner-ring"></div>
+                        <i class="fas fa-bicycle loading-icon"></i>
+                    </div>
+                    <h3 class="loading-title" id="loading-title">Logging you in...</h3>
+                    <p class="loading-subtitle" id="loading-subtitle">Preparing your cycling journey</p>
+                    <div class="loading-progress">
+                        <div class="loading-progress-bar" id="login-progress-bar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ride record page -->
+        <div id="record-page" class="page">
+            <div class="record-hero">
+                <h2>Current ride</h2>
+                <p>Track your ride</p>
+                <div class="live-indicator">
+                    <div class="live-dot"></div>
+                    <span>Live tracking</span>
+                </div>
+                <div class="tracking-badges">
+                    <div class="tracking-badge live" id="badge-live">
+                        <i class="fas fa-signal"></i>
+                        Live recording
+                    </div>
+                    <div class="tracking-badge paused hidden" id="badge-paused">
+                        <i class="fas fa-pause"></i>
+                        Paused
+                    </div>
+                    <div class="tracking-badge paused" id="badge-autopause">
+                        <i class="fas fa-car-side"></i>
+                        Auto-pause enabled
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="card-title">Ride map</h2>
+                <div class="map-container" id="record-map">
+                    <div class="map-placeholder" id="record-map-placeholder">
+                        <div class="map-loading-spinner"></div>
+                        <div class="map-loading-text">Loading AMap...</div>
+                    </div>
+                    <div class="live-tag">Live tracking</div>
+                </div>
+                <!-- Debug info -->
+                <div class="debug-info" id="map-debug-info" style="display: none;">
+                    <h4>Map debug info</h4>
+                    <p id="debug-status">Status: checking...</p>
+                    <p id="debug-api">API: checking...</p>
+                    <p id="debug-key">Key: loaded via server config</p>
+                    <p id="map-status">Map status: waiting for API load</p>
+                </div>
+                <button class="btn btn-secondary" style="margin-top: 10px;" onclick="toggleDebugInfo()">
+                    <i class="fas fa-bug"></i> Show debug info
+                </button>
+                <button class="btn btn-secondary" style="margin-top: 10px;" onclick="forceLoadMap()">
+                    <i class="fas fa-redo"></i> Force load map
+                </button>
+                
+            </div>
+            
+            <div class="metrics-section">
+                <div class="metrics-header">
+                    <div class="metrics-header-left">
+                        <h3 class="metrics-title">Live data</h3>
+                        <div class="sync-status" id="sync-status">
+                            <i class="fas fa-circle-notch fa-spin"></i>
+                            <span>Syncing</span>
+                        </div>
+                    </div>
+                    <span class="metrics-time" id="current-time">--:--:--</span>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card enhanced" data-metric="time">
+                        <div class="metric-icon-wrapper">
+                            <div class="metric-icon"><i class="fas fa-clock"></i></div>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="time-value">0:00:00</div>
+                            <div class="metric-label">Ride time</div>
+                            <div class="metric-trend" id="time-trend"></div>
+                        </div>
+                    </div>
+                    <div class="metric-card enhanced" data-metric="speed">
+                        <div class="metric-icon-wrapper">
+                            <div class="metric-icon"><i class="fas fa-tachometer-alt"></i></div>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="speed-value">0.0</div>
+                            <div class="metric-label">Speed (km/h)</div>
+                            <div class="metric-trend" id="speed-trend">
+                                <i class="fas fa-minus"></i> <span>--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="metric-card enhanced" data-metric="distance">
+                        <div class="metric-icon-wrapper">
+                            <div class="metric-icon"><i class="fas fa-road"></i></div>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="distance-value">0.0</div>
+                            <div class="metric-label">Distance (km)</div>
+                            <div class="metric-trend" id="distance-trend">
+                                <i class="fas fa-plus"></i> <span>+0.0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="metric-card enhanced" data-metric="calories">
+                        <div class="metric-icon-wrapper">
+                            <div class="metric-icon"><i class="fas fa-fire"></i></div>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value" id="calories-value">0</div>
+                            <div class="metric-label">Calories</div>
+                            <div class="metric-trend" id="calories-trend">
+                                <i class="fas fa-plus"></i> <span>+0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Data summary -->
+                <div class="data-summary" id="data-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">Avg speed</span>
+                        <span class="summary-value" id="avg-speed">0.0 km/h</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Top speed</span>
+                        <span class="summary-value" id="max-speed">0.0 km/h</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Pace</span>
+                        <span class="summary-value" id="pace">--:--/km</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-section">
+                <button class="btn btn-primary" id="tracking-btn" onclick="toggleTracking()">
+                    <i class="fas fa-play" id="tracking-icon"></i>
+                    <span id="tracking-text">Start ride</span>
+                </button>
+            </div>
+
+            <div class="card missions-card">
+                <div class="mission-header">
+                    <h3 class="card-title">Today's missions</h3>
+                    <span class="mission-xp" id="mission-xp">+0 XP</span>
+                </div>
+                <div id="mission-list" class="mission-list"></div>
+            </div>
+            
+            <div class="chart-section">
+                <div class="card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Ride Statistics</h3>
+                        <div class="chart-period">
+                            <button class="period-btn active" onclick="changeChartPeriod('week', this)">Week</button>
+                            <button class="period-btn" onclick="changeChartPeriod('month', this)">Month</button>
+                            <button class="period-btn" onclick="changeChartPeriod('year', this)">Year</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="ride-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="recent-section">
+                <div class="card">
+                    <div class="recent-header">
+                        <h3 class="recent-title">Recent activity</h3>
+                        <a href="#" class="view-all-btn" onclick="showDevNotice('History feature')">View all</a>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon ride">
+                            <i class="fas fa-bicycle"></i>
+                        </div>
+                        <div class="activity-info">
+                            <div class="activity-name">Morning ride</div>
+                            <div class="activity-details">12.5 km · 45 min · 280 kcal</div>
+                        </div>
+                        <div class="activity-time">Yesterday</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon commute">
+                            <i class="fas fa-route"></i>
+                        </div>
+                        <div class="activity-info">
+                            <div class="activity-name">City commute</div>
+                            <div class="activity-details">8.2 km · 30 min · 185 kcal</div>
+                        </div>
+                        <div class="activity-time">2 days ago</div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon ride">
+                            <i class="fas fa-mountain"></i>
+                        </div>
+                        <div class="activity-info">
+                            <div class="activity-name">Weekend adventure</div>
+                            <div class="activity-details">25.8 km · 1 hr 15 min · 520 kcal</div>
+                        </div>
+                        <div class="activity-time">3 days ago</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Location page -->
+        <div id="location-page" class="page">
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-map-marker-alt"></i> Current location</h2>
+                <div class="map-container" id="location-map">
+                    <div class="map-placeholder" id="location-map-placeholder">
+                        <div class="map-loading-spinner"></div>
+                        <div class="map-loading-text">Loading location info...</div>
+                    </div>
+                </div>
+                <div style="color: var(--text-secondary);">XJTLU Taicang Campus</div>
+                <div style="color: var(--text-secondary); margin-top: 4px;">Elevation: 120m, GPS accuracy: 3m</div>
+                <div style="color: var(--text-secondary); margin-top: 4px;" id="last-updated">Last updated: 2 minutes ago</div>
+
+                <!-- Location precision display and resample control -->
+                <div id="location-controls" style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+                    <span id="location-accuracy" style="color:var(--text-secondary);font-size:14px;">Precision: -- m</span>
+                    <button id="resample-btn" class="pill-btn" type="button" aria-label="Resample location"> 
+                        <i class="fas fa-sync"></i> Resample
+                    </button>
+                </div>
+            </div>
+
+            <div class="card insights-card" id="weather-card">
+                <div class="insights-header">
+                    <h3 class="card-title">Weather forecast</h3>
+                    <div class="weather-actions">
+                        <span class="weather-updated" id="weather-updated">--</span>
+                        <button class="pill-btn" onclick="refreshWeatherForecast()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <!-- Four-panel weather info -->
+                <div class="weather-grid-4">
+                    <div class="weather-grid-item">
+                        <div class="weather-label">City</div>
+                        <div class="weather-value" id="weather-city">--</div>
+                    </div>
+                    <div class="weather-grid-item">
+                        <div class="weather-label">Day/Night</div>
+                        <div class="weather-value" id="weather-desc">--</div>
+                    </div>
+                    <div class="weather-grid-item">
+                        <div class="weather-label">Temperature range</div>
+                        <div class="weather-value" id="weather-temp">--℃</div>
+                    </div>
+                    <div class="weather-grid-item">
+                        <div class="weather-label">Wind direction &amp; power</div>
+                        <div class="weather-value" id="weather-wind">--</div>
+                    </div>
+                </div>
+                <!-- 7-day forecast grid removed -->
+                <div class="insight-footer" id="insight-recommendation">--</div>
+            </div>
+
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-tools"></i> Nearby facilities</h2>
+                <div class="facility-tabs">
+                    <div class="facility-tab active" onclick="filterFacilities('all')">All</div>
+                    <div class="facility-tab" onclick="filterFacilities('restaurant')">Restaurant</div>
+                    <div class="facility-tab" onclick="filterFacilities('store')">Store</div>
+                    <div class="facility-tab" onclick="filterFacilities('repair')">Repair shop</div>
+                    <div class="facility-tab" onclick="filterFacilities('charging')">Charging spots</div>
+                </div>
+                <div class="facility-quick-actions">
+                    <div class="quick-action" data-action="nearest" onclick="setFacilityQuickFilter('nearest')">
+                        <i class="fas fa-location-arrow"></i> Nearest
+                    </div>
+                    <div class="quick-action" data-action="open" onclick="setFacilityQuickFilter('open')">
+                        <i class="fas fa-door-open"></i> Open now
+                    </div>
+                </div>
+                <div class="facility-list" id="facility-list"></div>
+            </div>
+        </div>
+
+        <!-- Bike detail page -->
+        <div id="bike-page" class="page">
+            <div class="bike-showcase">
+                <div class="bike-hero">
+                    <div class="bike-info-overlay">
+                        <div class="bike-name">Alex's e-bike</div>
+                        <div class="bike-model">Performance hybrid</div>
+                        <div class="battery-status-compact">
+                            <i class="fas fa-battery-full"></i>
+                            <span id="bike-battery-percent">85%</span>
+                        </div>
+                    </div>
+                    <div class="bike-render">
+                        <i class="fas fa-bicycle"></i>
+                    </div>
+                    <div class="bike-lock-badge" id="bike-lock-status">
+                        <i class="fas fa-lock"></i>
+                        <span>Locked</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bike-details">
+                <h2 class="card-title">Detail</h2>
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Battery Temperature</div>
+                        <div class="detail-value">32℃</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Last service</div>
+                        <div class="detail-value">2025-10-15</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Voltage</div>
+                        <div class="detail-value">48V</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Health</div>
+                        <div class="detail-value">92%</div>
+                    </div>
+                </div>
+
+                <div class="bike-features">
+                    <div class="feature-badge">
+                        <i class="fas fa-bolt"></i>
+                        Electric
+                    </div>
+                    <div class="feature-badge">
+                        <i class="fas fa-shield-alt"></i>
+                        Smart lock
+                    </div>
+                    <div class="feature-badge">
+                        <i class="fas fa-satellite-dish"></i>
+                        GPS tracking
+                    </div>
+                </div>
+            </div>
+
+            <div class="maintenance-alert">
+                <div class="maintenance-header">
+                    <div class="maintenance-icon">
+                        <i class="fas fa-wrench"></i>
+                    </div>
+                    <div class="maintenance-title">Maintenance reminder</div>
+                </div>
+                <div class="maintenance-content">
+                    <p style="margin-bottom: 12px;">Your vehicle will need maintenance soon</p>
+                    <div class="maintenance-stats">
+                        <div>
+                            <div style="font-size: 14px; opacity: 0.9;">Distance to next service</div>
+                            <div class="maintenance-distance">155 km</div>
+                        </div>
+                        <div class="maintenance-time">About 2 weeks</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="action-btn primary" onclick="showDevNotice('Service booking feature')">
+                    <i class="fas fa-calendar-check"></i>
+                    Schedule service
+                </button>
+                <button class="action-btn secondary" onclick="showDevNotice('Maintenance history feature')">
+                    <i class="fas fa-history"></i>
+                    Service history
+                </button>
+                <button class="action-btn secondary" onclick="showDevNotice('Bike settings feature')">
+                    <i class="fas fa-cog"></i>
+                    Settings
+                </button>
+                <button class="action-btn secondary" onclick="showDevNotice('Vehicle sharing feature')">
+                    <i class="fas fa-share-alt"></i>
+                    Share bike
+                </button>
+            </div>
+        </div>
+
+        <!-- User center page -->
+        <div id="user-page" class="page">
+            <div class="card">
+                <h2 class="card-title">Profile</h2>
+                <div class="user-header">
+                    <div class="avatar" onclick="showAvatarModal()">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-info">
+                        <div class="user-name" id="display-name">Alex Johnson</div>
+                        <div id="display-phone" style="color: var(--text-secondary);">13800138000</div>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">156</div>
+                        <div class="stat-label">Total rides</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2,456 km</div>
+                        <div class="stat-label">Total distance</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card goal-card">
+                <!-- Goal Header with Enhanced Visual Hierarchy -->
+                <div class="goal-header">
+                    <div class="goal-header-content">
+                        <div class="goal-icon-wrapper">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <div class="goal-title-section">
+                            <h3 class="goal-title">Weekly ride goal</h3>
+                            <p class="goal-subtitle" id="goal-target-text">This week's goal 120 km</p>
+                        </div>
+                    </div>
+                    <div class="goal-streak-badge" id="goal-streak-text">
+                        <div class="streak-flame">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="streak-info">
+                            <span class="streak-number">3</span>
+                            <span class="streak-label">day streak</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Goal Display Area -->
+                <div class="goal-body">
+                    <!-- Enhanced Progress Ring with Animation -->
+                    <div class="goal-ring-container" aria-hidden="true">
+                        <svg class="goal-ring-svg" viewBox="0 0 160 160">
+                            <defs>
+                                <linearGradient id="goalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
+                                    <stop offset="50%" style="stop-color:#06B6D4;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+                                </linearGradient>
+                                <filter id="glow">
+                                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                    <feMerge>
+                                        <feMergeNode in="coloredBlur"/>
+                                        <feMergeNode in="SourceGraphic"/>
+                                    </feMerge>
+                                </filter>
+                            </defs>
+                            <!-- Background Circle -->
+                            <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12"/>
+                            <!-- Progress Circle -->
+                            <circle id="goal-progress-circle" cx="80" cy="80" r="70" fill="none" 
+                                    stroke="url(#goalGradient)" stroke-width="12" 
+                                    stroke-linecap="round" 
+                                    stroke-dasharray="439.8" 
+                                    stroke-dashoffset="439.8"
+                                    transform="rotate(-90 80 80)"
+                                    filter="url(#glow)"
+                                    style="transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);"/>
+                        </svg>
+                        <div class="goal-ring-center">
+                            <div class="goal-progress-percent" id="goal-progress-text">0%</div>
+                            <div class="goal-progress-label">Progress</div>
+                            <div class="goal-progress-km" id="goal-progress-km-text">0 km</div>
+                        </div>
+                        <!-- Celebration Particles (hidden by default) -->
+                        <div class="goal-celebration" id="goal-celebration"></div>
+                    </div>
+
+                    <!-- Enhanced Stats Grid -->
+                    <div class="goal-stats-grid">
+                        <div class="goal-stat-card goal-stat-completed">
+                            <div class="stat-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Completed</span>
+                                <strong class="stat-value" id="goal-complete-text">0 km</strong>
+                            </div>
+                        </div>
+                        <div class="goal-stat-card goal-stat-remaining">
+                            <div class="stat-icon">
+                                <i class="fas fa-route"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Distance remaining</span>
+                                <strong class="stat-value" id="goal-remaining-text">0 km</strong>
+                            </div>
+                        </div>
+                        <div class="goal-stat-card goal-stat-average">
+                            <div class="stat-icon">
+                                <i class="fas fa-calendar-day"></i>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-label">Avg daily distance</span>
+                                <strong class="stat-value" id="goal-average-text">0 km</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Achievement Milestones -->
+                <div class="goal-milestones" id="goal-milestones">
+                    <div class="milestone-item" data-milestone="25">
+                        <div class="milestone-icon">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <span>25%</span>
+                    </div>
+                    <div class="milestone-item" data-milestone="50">
+                        <div class="milestone-icon">
+                            <i class="fas fa-medal"></i>
+                        </div>
+                        <span>50%</span>
+                    </div>
+                    <div class="milestone-item" data-milestone="75">
+                        <div class="milestone-icon">
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <span>75%</span>
+                    </div>
+                    <div class="milestone-item milestone-complete" data-milestone="100">
+                        <div class="milestone-icon">
+                            <i class="fas fa-crown"></i>
+                        </div>
+                        <span>100%</span>
+                    </div>
+                </div>
+
+                <!-- Motivational Message -->
+                <div class="goal-motivation" id="goal-motivation">
+                    <i class="fas fa-lightbulb"></i>
+                    <p id="goal-motivation-text">Start riding toward your goal!</p>
+                </div>
+
+                <!-- Goal Slider with Visual Feedback -->
+                <div class="goal-slider-section">
+                    <div class="goal-slider-header">
+                        <label for="goal-slider" class="goal-slider-label">
+                            <i class="fas fa-sliders-h"></i>
+                            Adjust weekly goal
+                        </label>
+                        <span class="goal-slider-value" id="goal-slider-display">120 km</span>
+                    </div>
+                    <div class="goal-slider-wrapper">
+                        <input type="range" id="goal-slider" min="40" max="300" step="10" 
+                               value="120" 
+                               aria-label="Set weekly ride goal"
+                               data-optimized="true">
+                        <div class="goal-slider-track"></div>
+                        <div class="goal-slider-markers">
+                            <span>40km</span>
+                            <span>170km</span>
+                            <span>300km</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title">About you</h2>
+                <div class="setting-item">
+                    <span>Name</span>
+                    <span class="editable-field" id="user-name-field" onclick="editField('name', this)">Alex Johnson</span>
+                </div>
+                <div class="setting-item">
+                    <span>Phone</span>
+                    <span class="editable-field" id="user-phone-field" onclick="editField('phone', this)">13800138000</span>
+                </div>
+                <div class="setting-item">
+                    <span>Age</span>
+                    <span class="editable-field" id="user-age-field" onclick="editField('age', this)">24</span>
+                </div>
+                <div class="setting-item">
+                    <span>Gender</span>
+                    <span class="editable-field" id="user-gender-field" onclick="editField('gender', this)">Male</span>
+                </div>
+                <div class="setting-item">
+                    <span>Height</span>
+                    <span class="editable-field" id="user-height-field" onclick="editField('height', this)">175cm</span>
+                </div>
+                <div class="setting-item">
+                    <span>Weight</span>
+                    <span class="editable-field" id="user-weight-field" onclick="editField('weight', this)">68kg</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title">Privacy controls</h2>
+                <div class="setting-item">
+                    <div>
+                        <div style="font-size: 16px; font-weight: 500; margin-bottom: 4px;">Data collection</div>
+                        <div style="font-size: 13px; color: var(--text-secondary);">Allow the app to collect your data</div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div>
+                        <div style="font-size: 16px; font-weight: 500; margin-bottom: 4px;">Notifications</div>
+                        <div style="font-size: 13px; color: var(--text-secondary);">Allow the app to send notifications</div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <button class="btn btn-danger" onclick="handleLogout()">Log out</button>
+        </div>
+    </div>
+
+    <button id="sos-button" class="sos-button hidden" onclick="triggerSOS()">
+        <i class="fas fa-bullhorn"></i>
+        SOS share
+        <span class="sos-badge">3s</span>
+    </button>
+
+    <!-- Bottom navigation -->
+    <div class="nav bottom">
+        <a href="#" class="nav-item" onclick="navigateTo('record-page')">
+            <i class="fas fa-route"></i>
+            <span>Record</span>
+        </a>
+        <a href="#" class="nav-item" onclick="navigateTo('location-page')">
+            <i class="fas fa-map"></i>
+            <span>Location</span>
+        </a>
+        <a href="#" class="nav-item" onclick="navigateTo('user-page')">
+            <i class="fas fa-user"></i>
+            <span>User</span>
+        </a>
+        <a href="#" class="nav-item" onclick="navigateTo('bike-page')">
+            <i class="fas fa-motorcycle"></i>
+            <span>Bike</span>
+        </a>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title" id="modal-title">Title</h2>
+            <div id="modal-body"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" id="modal-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications -->
+    <div id="notification" class="notification"></div>
+
+    <!-- In-development notice -->
+    <div id="dev-overlay" class="dev-overlay"></div>
+    <div id="dev-notice" class="dev-notice">
+        <div class="dev-notice-icon">
+            <i class="fas fa-tools"></i>
+        </div>
+        <div class="dev-notice-title">Feature in development</div>
+        <div class="dev-notice-text" id="dev-notice-text">
+            This feature is being built—stay tuned!
+        </div>
+        <button class="dev-notice-btn" onclick="closeDevNotice()">Got it</button>
+    </div>
+
+    <!-- Onboarding -->
+    <div id="tour-overlay" class="tour-overlay">
+        <div class="tour-card">
+            <h3 id="tour-title">Quick start</h3>
+            <p id="tour-body">We'll guide you through BikeMate's key features.</p>
+            <div class="tour-steps" id="tour-steps"></div>
+            <div class="tour-actions">
+                <button class="btn btn-secondary" onclick="skipTour()">Skip</button>
+                <button class="btn btn-primary" id="tour-next-btn" onclick="nextTourStep()">Next</button>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/app.js" defer></script>
+</body>
